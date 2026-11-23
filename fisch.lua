@@ -2555,6 +2555,7 @@ local Success, Error = pcall(function()
 			end
 		end,
 	})
+	local GameplayDisruptionGroup = Tabs.Misc:AddRightGroupbox"Gameplay Disruption"
 	GameplayDisruptionGroup:AddToggle("ServerStresser", {
 		Text = "Lag/Crash server",
 		Default = false,
