@@ -848,6 +848,28 @@ local Success, Error = pcall(function()
 	if not Remotes.SellAll then
 		Remotes.SellAll = FindNamed(ReplicatedStorage, "sellall")
 	end
+	local function FireRemote(Remote, ...)
+		if not Remote then
+			return false
+		end
+
+		local Args = table.pack(...)
+		local Ok
+
+		if typeof(Remote) == "Instance" and Remote:IsA("RemoteFunction") then
+			Ok = pcall(function()
+				return Remote:InvokeServer(table.unpack(Args, 1, Args.n))
+			end)
+			return Ok
+		end
+
+		Ok = pcall(function()
+			Remote:FireServer(table.unpack(Args, 1, Args.n))
+		end)
+
+		return Ok
+	end
+
 
 	local Collection = {}
 	local OnUnload = Instance.new"BindableEvent"
@@ -2180,7 +2202,7 @@ local Success, Error = pcall(function()
 		for i = 1, Amount do
 			task.spawn(function()
 				pcall(function()
-					Remotes.Power:InvokeServer()
+					FireRemote(Remotes.Power)
 				end)
 			end)
 		end
@@ -2196,7 +2218,7 @@ local Success, Error = pcall(function()
 		for i = 1, Amount do
 			task.spawn(function()
 				pcall(function()
-					Remotes.Luck:InvokeServer()
+					FireRemote(Remotes.Luck)
 				end)
 			end)
 		end
@@ -2693,7 +2715,7 @@ local Success, Error = pcall(function()
 		while task.wait(1) do
 			if GetToggleValue"AutoSell" then
 				if Remotes.SellAll then
-					Remotes.SellAll:InvokeServer()
+					FireRemote(Remotes.SellAll)
 				end
 			end
 		end
@@ -2701,25 +2723,32 @@ local Success, Error = pcall(function()
 
 	local AutoClickCoroutine = coroutine.create(function()
 		function Utils.MountShakeUI(ShakeUI)
-			local SafeZone = (ShakeUI:WaitForChild("safezone", 5) )
-			local function HandleButton(Button)
-				Button.Selectable = true 
-
-				if EnsureInstance(Button) then
-					GuiService.SelectedObject = Button
-				end
+			if not ShakeUI or ShakeUI:GetAttribute("NoxMounted") then
+				return
 			end
+
+			local SafeZone = ShakeUI:WaitForChild("safezone", 5)
 
 			if not SafeZone then
 				dbgwarn"Unable to mount shake UI."
 				return
 			end
 
+			ShakeUI:SetAttribute("NoxMounted", true)
+
+			local function HandleButton(Button)
+				Button.Selectable = true
+
+				if EnsureInstance(Button) then
+					GuiService.SelectedObject = Button
+				end
+			end
+
 			if GetToggleValue"CenterShake" then
 				local Connect = SafeZone:WaitForChild("connect", 1)
 
 				if Connect then
-					Connect.Enabled = false 
+					Connect.Enabled = false
 				end
 
 				SafeZone.Size = UDim2.fromOffset(0, 0)
@@ -2727,52 +2756,50 @@ local Success, Error = pcall(function()
 				SafeZone.AnchorPoint = Vector2.new(0.5, 0.5)
 			end
 
-			if GetToggleValue"AutoShake" then
-				local Connection = SafeZone.ChildAdded:Connect(function(Child)
-					if not Child:IsA"ImageButton" then
-						return
-					end
-					
-					if replicatesignal then
-						replicatesignal(Child.MouseButton1Click)
-						task.delay(0.05, function()
-							Child:Destroy()
-						end) 
-						return
-					end
-					
-					local Done = false
-
-					task.spawn(function()
-						repeat
-							RunService.Heartbeat:Wait()
-							HandleButton(Child)
-						until Done
-					end)
-
-					task.spawn(function()
-						repeat
-							RunService.Heartbeat:Wait()
-						until (not Child) or (not Child:IsDescendantOf(SafeZone))
-						Done = true
-					end)
-				end)
-
-				if replicatesignal then
+			Collect(SafeZone.ChildAdded:Connect(function(Child)
+				if not Child:IsA"ImageButton" then
 					return
 				end
-				
-				repeat
-					RunService.Heartbeat:Wait()
-					if GuiService.SelectedObject and GuiService.SelectedObject:IsDescendantOf(SafeZone) then
-						VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-						VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+
+				-- 每次出按钮都实时读开关, 不再把状态固定在挂载那一刻
+				if not GetToggleValue"AutoShake" then
+					return
+				end
+
+				if replicatesignal then
+					pcall(replicatesignal, Child.MouseButton1Click)
+
+					task.delay(0.05, function()
+						if Child and Child.Parent then
+							Child:Destroy()
+						end
+					end)
+
+					return
+				end
+
+				local Done = false
+
+				task.spawn(function()
+					while not Done do
+						RunService.Heartbeat:Wait()
+
+						if not Child or not Child.Parent then
+							break
+						end
+
+						HandleButton(Child)
 					end
-					RunService.Heartbeat:Wait()
-				until not SafeZone:IsDescendantOf(LocalPlayer.PlayerGui)
-				Connection:Disconnect()
-				GuiService.SelectedObject = nil
-			end
+				end)
+
+				task.spawn(function()
+					repeat
+						RunService.Heartbeat:Wait()
+					until (not Child) or (not Child.Parent) or (not Child:IsDescendantOf(SafeZone))
+
+					Done = true
+				end)
+			end))
 		end
 
 		Collect(LocalPlayer.PlayerGui.ChildAdded:Connect(function(Child)
@@ -2780,37 +2807,49 @@ local Success, Error = pcall(function()
 				Utils.MountShakeUI(Child)
 			end
 		end))
+
+		-- 已经存在的摇竿界面也要挂上, 否则游戏先弹过一次就永远没效果
+		for _, Child in next, LocalPlayer.PlayerGui:GetChildren() do
+			if Child:IsA"ScreenGui" and string.find(string.lower(Child.Name), "shake", 1, true) then
+				Utils.MountShakeUI(Child)
+			end
+		end
 	end)
 
 	local AutoReelCoroutine = coroutine.create(function()
+		local LastInstant = 0
+
 		while true do
 			RunService.RenderStepped:Wait()
 
 			local ReelUI = GetReelGui()
+
 			if not ReelUI then
 				continue
 			end
 
 			if GetToggleValue"InstantReel" then
-				local Bar = ReelUI:FindFirstChild"bar"
-				if Bar then
-					local ReelScript = Bar:FindFirstChild"reel"
-					if ReelScript and ReelScript.Enabled == true then
-					if Remotes.ReelFinished then
-						Remotes.ReelFinished:FireServer(100, GetToggleValue"PerfectReel")
-					end
-					end
+				if Remotes.ReelFinished and ReelUI.Enabled ~= false and tick() - LastInstant > 0.2 then
+					LastInstant = tick()
+					FireRemote(Remotes.ReelFinished, 100, GetToggleValue"PerfectReel")
 				end
 			elseif GetToggleValue"AutoReel" then
 				local Bar = ReelUI:FindFirstChild"bar"
+
 				if not Bar then
 					continue
 				end
 
 				local PlayerBar = Bar:FindFirstChild"playerbar"
 				local TargetBar = Bar:FindFirstChild"fish"
-				while Bar and ReelUI:IsDescendantOf(LocalPlayer.PlayerGui) do
+
+				if not PlayerBar or not TargetBar then
+					continue
+				end
+
+				while Bar and Bar.Parent and ReelUI.Parent do
 					RunService.RenderStepped:Wait()
+
 					local UnfilteredTargetPosition = PlayerBar.Position:Lerp(TargetBar.Position, 0.7)
 					local TargetPosition = UDim2.fromScale(
 						math.clamp(UnfilteredTargetPosition.X.Scale, 0.15, 0.85),
@@ -2874,7 +2913,7 @@ local Success, Error = pcall(function()
 						LastCastAttempt = tick()
 
 						-- 先甩竿, 动画只是表演, 找不到动画也不影响甩竿
-						CastRemote:FireServer(100, 1)
+						FireRemote(CastRemote, 100, 1)
 
 						pcall(function()
 							local Resources = ReplicatedStorage:FindFirstChild("resources")
