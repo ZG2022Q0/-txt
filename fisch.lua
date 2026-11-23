@@ -825,10 +825,13 @@ local Success, Error = pcall(function()
 		end
 	end
 
+	local OptionsTable = Library.Options or getgenv().Options or {}
+	local TogglesTable = Library.Toggles or getgenv().Toggles or {}
+
 	local UI = {
 		Library = Library,
-		Options = getgenv().Options,
-		Toggles = getgenv().Toggles,
+		Options = OptionsTable,
+		Toggles = TogglesTable,
 	}
 
 	local function GetToggleValue(Name)
@@ -1221,7 +1224,7 @@ local Success, Error = pcall(function()
 		NoUI = true,
 		Text = 'Menu keybind'
 	})
-	Library.ToggleKeybind = Options.MenuKeybind
+	Library.ToggleKeybind = Library.Options.MenuKeybind
 	ThemeManager:SetLibrary(Library)
 	SaveManager:SetLibrary(Library)
 	SaveManager:IgnoreThemeSettings()
@@ -1366,7 +1369,7 @@ local Success, Error = pcall(function()
 			infiniteJumpConnection:Disconnect()
 		end
 		infiniteJumpConnection = UserInputService.JumpRequest:Connect(function()
-			if Toggles.EnableInfiniteJump and localPlayer.Character then
+			if Library.Toggles and Library.Toggles.EnableInfiniteJump and localPlayer.Character then
 				local humanoid = localPlayer.Character:FindFirstChildOfClass"Humanoid"
 				if humanoid then
 					humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
