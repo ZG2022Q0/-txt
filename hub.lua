@@ -90,21 +90,22 @@ pcall(function()
 end)
 -- ==============================================================
 
-game:GetService("StarterGui"):SetCore("SendNotification",{ Title = "『阿风脚本』"; Text ="防踢已开启"; Icon = "rbxassetid://92833142656790"; Duration = 1; })
+pcall(function() game:GetService("StarterGui"):SetCore("SendNotification",{ Title = "『阿风脚本』"; Text ="防踢已开启"; Icon = "rbxassetid://92833142656790"; Duration = 1; }) end)
  wait(2)
 
-game:GetService("StarterGui"):SetCore("SendNotification",{ Title = "『阿风脚本』"; Text ="加载成功 祝你愉快"; Icon = "rbxassetid://92833142656790"; Duration = 1; })
+pcall(function() game:GetService("StarterGui"):SetCore("SendNotification",{ Title = "『阿风脚本』"; Text ="加载成功 祝你愉快"; Icon = "rbxassetid://92833142656790"; Duration = 1; }) end)
  wait(1)
 
-local Notification = loadstring(game:HttpGet("https://raw.githubusercontent.com/FD2Team/archive/main/notificationtest"))();
-local Notify = Notification.Notify;
-
- Notify({
-		 Description = "阿风";
-		 Title = "认准";
-		 Duration = 5;
-		 
-});
+do
+    local ok, mod = pcall(function()
+        return loadstring(game:HttpGet("https://raw.githubusercontent.com/FD2Team/archive/main/notificationtest"))()
+    end)
+    pcall(function()
+        if ok and type(mod) == "table" and mod.Notify then
+            mod.Notify({ Description = "阿风", Title = "认准", Duration = 5 })
+        end
+    end)
+end
 
 local dropdown = {}
 local playernamedied = ""
@@ -114,12 +115,14 @@ for i, player in pairs(game.Players:GetPlayers()) do
 end
 
 function Notify(top, text, ico, dur)
-  game:GetService("StarterGui"):SetCore("SendNotification", {
-    Title = top,
-    Text = text,
-    Icon = ico,
-    Duration = dur,
-  })
+  pcall(function()
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+      Title = top,
+      Text = text,
+      Icon = ico,
+      Duration = dur,
+    })
+  end)
 end
 
 local LBLG = Instance.new("ScreenGui", getParent)
@@ -163,9 +166,42 @@ end
 Start = tick()
 Heartbeat:Connect(HeartbeatUpdate)
 
-local Lengui = loadstring(game:HttpGet("https://tinyurl.com/2xjc5yj3"))()
+local function loadUILib()
+    local urls = {
+        "https://tinyurl.com/2xjc5yj3",
+        "https://tinyurl.com/2ccatj9x",
+    }
+    for _, u in ipairs(urls) do
+        local ok, res = pcall(function()
+            return loadstring(game:HttpGet(u, true))()
+        end)
+        if ok and type(res) == "table" and res.new then return res end
+    end
+    error("[阿风脚本] UI库加载失败，请重新执行")
+end
+local Lengui = loadUILib()
 local win = Lengui:new("阿风脚本V3")
+
+local function guard(name, fn)
+    local ok, err = pcall(fn)
+    if not ok then
+        warn("[阿风脚本][" .. tostring(name) .. "] 模块构建失败: " .. tostring(err))
+    end
+end
+
+local function safeHum()
+    local c = game.Players.LocalPlayer and game.Players.LocalPlayer.Character
+    if not c then return nil end
+    return c:FindFirstChildOfClass("Humanoid")
+end
+
+local function safeRoot()
+    local c = game.Players.LocalPlayer and game.Players.LocalPlayer.Character
+    if not c then return nil end
+    return c:FindFirstChild("HumanoidRootPart")
+end
 --
+guard("『信息』", function()
 local UITab1 = win:Tab("『信息』",'16060333448')
 
 local about = UITab1:section("『信息』",false)
@@ -177,6 +213,8 @@ about:Label("QQ群: 807981614")
 about:Label("持续更新中")
 about:Label("务必加入QQ群以获取更新")
 
+end)
+guard("『测试员必看』", function()
 local UITab1 = win:Tab("『测试员必看』",'16060333448')
 
 local about = UITab1:section("『使用须知』",false)
@@ -185,12 +223,16 @@ about:Label("可正常使用：🟢")
 about:Label("不可使用：🔴")
 about:Label("可能有异常：🟠")
 
+end)
+guard("『技术测试员』", function()
 local UITab3 = win:Tab("『技术测试员』",'16060333448')
 
 local about = UITab3:section("『技术测试员』",false)
     
 about:Label("阿风")
 
+end)
+guard("『复制阿风脚本群』", function()
 local UITab5 = win:Tab("『复制阿风脚本群』",'16060333448')
 
 local about = UITab5:section("『复制阿风脚本群』",false)
@@ -203,6 +245,8 @@ end)
     setclipboard("3157360048")
 end)
 
+end)
+guard("『通用功能』", function()
 local UITab6 = win:Tab("『通用功能』",'16060333448')
 
 local about = UITab6:section("『其他功能』",false)
@@ -392,12 +436,12 @@ about:Toggle("无限跳","Toggle",false,function(Value)
         end)
     end)
 
-about:Slider("步行速度!", "WalkSpeed", game.Players.LocalPlayer.Character.Humanoid.WalkSpeed, 16, 400, false, function(Speed)
-  spawn(function() while task.wait() do game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = Speed end end)
+about:Slider("步行速度!", "WalkSpeed", (function() local h = safeHum() return h and h.WalkSpeed or 16 end)(), 16, 400, false, function(Speed)
+  spawn(function() while task.wait() do local h = safeHum() if h then h.WalkSpeed = Speed end end end)
 end)
 
-about:Slider("跳跃高度!", "JumpPower", game.Players.LocalPlayer.Character.Humanoid.JumpPower, 50, 400, false, function(Jump)
-  spawn(function() while task.wait() do game.Players.LocalPlayer.Character.Humanoid.JumpPower = Jump end end)
+about:Slider("跳跃高度!", "JumpPower", (function() local h = safeHum() return h and h.JumpPower or 50 end)(), 50, 400, false, function(Jump)
+  spawn(function() while task.wait() do local h = safeHum() if h then h.JumpPower = Jump end end end)
 end)
 
 about:Button("甩人",function()
@@ -641,6 +685,8 @@ end
 coroutine.wrap(EKBNYI_fake_script)()
 end)
 
+end)
+guard("『画质光影』", function()
 local UITab7 = win:Tab("『画质光影』",'16060333448')
 
 local about = UITab7:section("『画质光影』",false)
@@ -672,6 +718,8 @@ about:Button("光影浅", function()
     loadstring(game:HttpGet("https://pastebin.com/raw/jHBfJYmS"))()
 end)
 
+end)
+guard("『无限Robux』", function()
 local UITab8 = win:Tab("『无限Robux』",'16060333448')
 
 local about = UITab8:section("『无限Robux』",false)
@@ -700,6 +748,8 @@ about:Button("1000Robux",function()
 loadstring(game:HttpGet('https://raw.githubusercontent.com/CloudX-ScriptsWane/White-ash-script/main/Free%20Robux.LUA'))()
 end)
 
+end)
+guard("『整合脚本 未更新』", function()
 local UITab30 = win:Tab("『整合脚本 未更新』",'7734068321')
 
 local about = UITab30:section("『整合脚本』",true)
@@ -740,6 +790,8 @@ about:Button("XK脚本中心",function()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/BINjiaobzx6/BINjiao/main/XK.TXT"))()
 end)
 
+end)
+guard("『GB🔴』", function()
 local UITab30 = win:Tab("『GB🔴』",'7734068321')
 
 local about = UITab30:section("『内脏与黑火药』",true)
@@ -748,6 +800,8 @@ about:Button("情云-内脏与黑火药",function()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ChinaQY/Scripts/Main/GB"))()
 end)
 
+end)
+guard("『DOORS🔴』", function()
 local UITab30 = win:Tab("『DOORS🔴』",'7734068321')
 
 local about = UITab30:section("『DOORS』",true)
@@ -756,6 +810,8 @@ about:Button("DOORS",function()
 loadstring(game:HttpGet("\104\116\116\112\115\58\47\47\112\97\115\116\101\98\105\110\46\99\111\109\47\114\97\119\47\54\53\84\119\84\56\106\97"))()
 end)
 
+end)
+guard("『鸟🔴』", function()
 local UITab30 = win:Tab("『鸟🔴』",'7734068321')
 
 local about = UITab30:section("『鸟 与鱼玩法类似』",true)
@@ -764,6 +820,8 @@ about:Button("服务器名称:beaks",function()
 loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/e0f8a0809afcd8b22e64b02d363d0310.lua"))()
 end)
 
+end)
+guard("『鱼🔴』", function()
 local UITab30 = win:Tab("『鱼🔴』",'7734068321')
 
 local about = UITab30:section("『鱼』",true)
@@ -772,6 +830,8 @@ about:Button("鱼",function()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/Efe0626/RaitoHub/refs/heads/main/Script"))()
 end)
 
+end)
+guard("『挖掘它🔴』", function()
 local UITab30 = win:Tab("『挖掘它🔴』",'7734068321')
 
 local about = UITab30:section("『挖掘它』",true)
@@ -780,6 +840,8 @@ about:Button("挖掘它",function()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/alyssagithub/Scripts/refs/heads/main/FrostByte/Initiate.lua"))()
 end)
 
+end)
+guard("『被遗弃🔴』", function()
 local UITab30 = win:Tab("『被遗弃🔴』",'7734068321')
 
 local about = UITab30:section("『被遗弃』",true)
@@ -788,6 +850,8 @@ about:Button("被遗弃",function()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/alyssagithub/Scripts/refs/heads/main/FrostByte/Initiate.lua"))()
 end)
 
+end)
+guard("『伐木大亨2🔴』", function()
 local UITab30 = win:Tab("『伐木大亨2🔴』",'7734068321')
 
 local about = UITab30:section("『伐木大亨2』",true)
@@ -796,6 +860,8 @@ about:Button("白-伐木大亨2",function()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/XiaoYunCN/Kavo-Ui/main/%E4%BC%90%E6%9C%A8%E5%A4%A7%E4%BA%A82.lua", true))()
 end)
 
+end)
+guard("『索纳里亚🔴』", function()
 local UITab30 = win:Tab("『索纳里亚🔴』",'7734068321')
 
 local about = UITab30:section("『索纳里亚』",true)
@@ -804,6 +870,8 @@ about:Button("索纳里亚",function()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/alyssagithub/Scripts/refs/heads/main/FrostByte/Initiate.lua"))()
 end)
 
+end)
+guard("『一路向西🟢』", function()
 local UITab30 = win:Tab("『一路向西🟢』",'16060333448')
 
 local SGV_Tab = UITab30:section("无法奔跑请重置人物",false)
@@ -1232,6 +1300,8 @@ SGV_Tab:Toggle("白天","开关",false,function()
     _G.FullBrightEnabled = not _G.FullBrightEnabled
 end)
 
+end)
+guard("『战争大亨🟠』", function()
 local SGV_UI_Tab = win:Tab("『战争大亨🟠』")
 
 local SGV_Tab = SGV_UI_Tab:section("基地模式",false)
@@ -2067,7 +2137,8 @@ end)
 
 addConnection(RuS.RenderStepped, function()
     Character = Player.Character
-    Humanoid = Character.Humanoid
+    Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+    if not Humanoid then return end
 
     if Character and Humanoid then
         Humanoid.WalkSpeed = settings.WalkSpeed
@@ -2115,3 +2186,4 @@ end)
 local player = game.Players.LocalPlayer
 local playerTeam = player.Team
 local teamName = playerTeam and playerTeam.Name or "No Team"
+end)
