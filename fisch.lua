@@ -782,6 +782,73 @@ local Success, Error = pcall(function()
 		end
 	end
 
+	-- [修复] 名字模糊查找, 游戏结构变了也尽量能接上
+	local function FindNamed(Root, Fragment)
+		if not Root then
+			return nil
+		end
+
+		Fragment = string.lower(Fragment)
+
+		for _, Item in next, Root:GetDescendants() do
+			if Item:IsA("RemoteEvent") or Item:IsA("RemoteFunction") then
+				if string.find(string.lower(Item.Name), Fragment, 1, true) then
+					return Item
+				end
+			end
+		end
+
+		return nil
+	end
+
+	local function GetReelGui()
+		local PlayerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+
+		if not PlayerGui then
+			return nil
+		end
+
+		local Reel = PlayerGui:FindFirstChild("reel") or PlayerGui:FindFirstChild("Reel")
+
+		if Reel then
+			return Reel
+		end
+
+		for _, Item in next, PlayerGui:GetChildren() do
+			if (Item:IsA("ScreenGui") or Item:IsA("GuiObject"))
+				and string.find(string.lower(Item.Name), "reel", 1, true)
+			then
+				return Item
+			end
+		end
+
+		return nil
+	end
+
+	local function GetToolParts(Tool)
+		if not Tool then
+			return nil, nil, nil
+		end
+
+		local Values = Tool:FindFirstChild("values", true)
+		local Events = Tool:FindFirstChild("events", true)
+		local CastRemote = nil
+
+		if Events then
+			CastRemote = Events:FindFirstChild("cast", true) or FindNamed(Events, "cast")
+		end
+
+		return Values, Events, CastRemote
+	end
+
+	if not Remotes.ReelFinished then
+		Remotes.ReelFinished = FindNamed(ReplicatedStorage, "reelfinished")
+	end
+
+	if not Remotes.SellAll then
+		Remotes.SellAll = FindNamed(ReplicatedStorage, "sellall")
+	end
+
 	local Collection = {}
 	local OnUnload = Instance.new"BindableEvent"
 	local function Collect(Item)
@@ -1185,16 +1252,24 @@ local Success, Error = pcall(function()
 	end
 
 	local function ResetTool()
-		if CurrentTool then
-			local ToolCache = LocalPlayer.Character:FindFirstChildOfClass"Tool"
-			if CurrentTool then
-				if State.LastToolReset + State.ToolResetCooldown < os.clock() then
-					State.LastToolReset = os.clock()
-					LocalPlayer.Character.Humanoid:UnequipTools()
-					task.wait()
-					ToolCache.Parent = LocalPlayer.Character
-				end
-			end
+		local Character = LocalPlayer.Character
+
+		if not Character then
+			return
+		end
+
+		local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+		local Equipped = Character:FindFirstChildOfClass("Tool")
+
+		if not Humanoid or not Equipped then
+			return
+		end
+
+		if State.LastToolReset + State.ToolResetCooldown < os.clock() then
+			State.LastToolReset = os.clock()
+			Humanoid:UnequipTools()
+			task.wait()
+			Equipped.Parent = Character
 		end
 	end
 
@@ -2339,7 +2414,125 @@ local Success, Error = pcall(function()
 
 
 
-	local GameplayDisruptionGroup = Tabs.Misc:AddRightGroupbox"Gameplay Disruption"
+	local DiagGroup = Tabs.Misc:AddRightGroupbox"诊断"
+	local DiagGui, DiagLabel, DiagRunning
+
+	local function DiagLine(Ok, Text)
+		return (Ok and "正常 " or "缺失 ") .. Text
+	end
+
+	local function BuildDiagPanel()
+		if DiagGui and DiagGui.Parent then
+			return
+		end
+
+		local PlayerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 10)
+
+		if not PlayerGui then
+			return
+		end
+
+		local Gui = Instance.new("ScreenGui")
+		Gui.Name = "NoxHubDiag"
+		Gui.ResetOnSpawn = false
+		Gui.DisplayOrder = 9999
+		Gui.IgnoreGuiInset = true
+		Gui.Parent = PlayerGui
+
+		local Label = Instance.new("TextLabel")
+		Label.Size = UDim2.new(0, 450, 0, 340)
+		Label.Position = UDim2.fromOffset(12, 12)
+		Label.BackgroundColor3 = Color3.fromRGB(15, 16, 20)
+		Label.BackgroundTransparency = 0.15
+		Label.TextColor3 = Color3.fromRGB(230, 232, 238)
+		Label.TextSize = 13
+		Label.Font = Enum.Font.Code
+		Label.TextXAlignment = Enum.TextXAlignment.Left
+		Label.TextYAlignment = Enum.TextYAlignment.Top
+		Label.TextWrapped = true
+		Label.Parent = Gui
+
+		DiagGui = Gui
+		DiagLabel = Label
+	end
+
+	local function RefreshDiag()
+		if not (DiagLabel and DiagLabel.Parent) then
+			return
+		end
+
+		local PlayerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+		local Rod = CurrentTool
+
+		if not Rod and LocalPlayer.Character then
+			Rod = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+		end
+
+		local Values, Events, CastRemote = GetToolParts(Rod)
+
+		DiagLabel.Text = table.concat({
+			"NoxHub 诊断  " .. os.date("%H:%M:%S"),
+			"PlaceId " .. tostring(game.PlaceId) .. " / 钩子 " .. tostring(not NO_HOOKING),
+			"",
+			DiagLine(Remotes.ReelFinished ~= nil, "远程 reelfinished"),
+			DiagLine(Remotes.SellAll ~= nil, "远程 SellAll"),
+			DiagLine(Remotes.Power ~= nil, "Merlin Power"),
+			DiagLine(Remotes.Luck ~= nil, "Merlin Luck"),
+			"",
+			"装备中的工具: " .. (Rod and Rod.Name or "无 (先拿鱼竿)"),
+			DiagLine(Values ~= nil, "工具 values"),
+			DiagLine(Events ~= nil, "工具 events"),
+			DiagLine(CastRemote ~= nil, "工具 cast 远程"),
+			"",
+			DiagLine(PlayerGui ~= nil and PlayerGui:FindFirstChild("reel") ~= nil, "reel 界面"),
+			DiagLine(PlayerGui ~= nil and PlayerGui:FindFirstChild("shakeui") ~= nil, "shakeui 界面"),
+			"钓鱼区数量: " .. tostring(#FishingZones_DropDownValues),
+			"",
+			DiagLine(Interface.TeleportSpots ~= nil, "TeleportSpots"),
+			DiagLine(Interface.Inventory ~= nil, "Inventory"),
+			DiagLine(Interface.NPCs ~= nil, "NPCs"),
+			DiagLine(Interface.PlayerData ~= nil, "PlayerData"),
+			DiagLine(Interface.ActiveBoats ~= nil, "ActiveBoats"),
+			DiagLine(Interface.BoatModels ~= nil, "BoatModels"),
+			"",
+			"执行器: replicatesignal=" .. tostring(replicatesignal ~= nil)
+				.. " / getconnections=" .. tostring(getconnections ~= nil),
+		}, "\n")
+	end
+
+	DiagGroup:AddToggle("DiagPanel", {
+		Text = "诊断面板 [排查用]",
+		Default = false,
+		Tooltip = "显示各依赖是否加载成功, 用来定位哪个功能失效",
+		Callback = function(Value)
+			if Value then
+				BuildDiagPanel()
+
+				if not DiagRunning then
+					DiagRunning = task.spawn(function()
+						while DiagRunning do
+							if not (DiagGui and DiagGui.Parent) then
+								break
+							end
+
+							pcall(RefreshDiag)
+							task.wait(1)
+						end
+
+						DiagRunning = nil
+					end)
+				end
+			else
+				if DiagGui then
+					DiagGui:Destroy()
+					DiagGui = nil
+				end
+
+				DiagLabel = nil
+				DiagRunning = nil
+			end
+		end,
+	})
 	GameplayDisruptionGroup:AddToggle("ServerStresser", {
 		Text = "Lag/Crash server",
 		Default = false,
@@ -2583,7 +2776,7 @@ local Success, Error = pcall(function()
 		end
 
 		Collect(LocalPlayer.PlayerGui.ChildAdded:Connect(function(Child)
-			if Child.Name == "shakeui" and Child:IsA"ScreenGui" then
+			if Child:IsA"ScreenGui" and string.find(string.lower(Child.Name), "shake", 1, true) then
 				Utils.MountShakeUI(Child)
 			end
 		end))
@@ -2593,7 +2786,7 @@ local Success, Error = pcall(function()
 		while true do
 			RunService.RenderStepped:Wait()
 
-			local ReelUI = LocalPlayer.PlayerGui:FindFirstChild"reel"
+			local ReelUI = GetReelGui()
 			if not ReelUI then
 				continue
 			end
@@ -2636,73 +2829,69 @@ local Success, Error = pcall(function()
 		while task.wait(0.5) do
 			if GetToggleValue"AutoCast" then
 				pcall(function()
-					if not CurrentTool then
+					local Tool = CurrentTool
+
+					if not Tool and LocalPlayer.Character then
+						Tool = LocalPlayer.Character:FindFirstChildOfClass("Tool")
+					end
+
+					if not Tool then
 						return
 					end
 
-					local Values = CurrentTool:FindFirstChild"values"
-					if CurrentTool and Values then
-						local Events = CurrentTool:FindFirstChild"events"
-						if
-							Values:FindFirstChild"bite"							
-and Values.bite.Value == true
-							and Values.casted.Value == true
-						then
-							if (not LocalPlayer.PlayerGui:FindFirstChild"reel") and tick() - LastCastAttempt > 5 then
-								ResetTool()
-							end
-						end
+					CurrentTool = Tool
 
-						if Utils.CountInstances(LocalPlayer.PlayerGui, "reel") > 1 then
+					local Values, Events, CastRemote = GetToolParts(Tool)
+
+					if not Values or not Events then
+						return
+					end
+
+					local Casted = Values:FindFirstChild("casted")
+					local Bite = Values:FindFirstChild("bite")
+
+					if not Casted then
+						return
+					end
+
+					if Bite and Bite.Value == true and Casted.Value == true then
+						if (not GetReelGui()) and tick() - LastCastAttempt > 5 then
 							ResetTool()
-							for _, Child in next, LocalPlayer.PlayerGui:GetChildren() do
-								if Child.Name == "reel" then
-									Child:Destroy()
-								end
+						end
+					end
+
+					if Utils.CountInstances(LocalPlayer.PlayerGui, "reel") > 1 then
+						ResetTool()
+
+						for _, Child in next, LocalPlayer.PlayerGui:GetChildren() do
+							if Child.Name == "reel" then
+								Child:Destroy()
 							end
 						end
+					end
 
-						if Values.casted.Value == false then
-							LastCastAttempt = tick()
+					if Casted.Value == false and CastRemote then
+						LastCastAttempt = tick()
 
-							local AnimationFolder = ReplicatedStorage:WaitForChild"resources"								
-:WaitForChild"animations"
-							local CastAnimation = LocalPlayer.Character
-								:FindFirstChild"Humanoid"								
-:LoadAnimation(AnimationFolder.fishing.throw)
-							CastAnimation.Priority = Enum.AnimationPriority.Action3
-							CastAnimation:Play()
-							Events.cast:FireServer(100, 1)
+						-- 先甩竿, 动画只是表演, 找不到动画也不影响甩竿
+						CastRemote:FireServer(100, 1)
 
-							CastAnimation.Stopped:Once(function()
-								CastAnimation:Destroy()
+						pcall(function()
+							local Resources = ReplicatedStorage:FindFirstChild("resources")
+							local Animations = Resources and Resources:FindFirstChild("animations")
+							local Fishing = Animations and Animations:FindFirstChild("fishing")
+							local Throw = Fishing and Fishing:FindFirstChild("throw")
+							local Character = LocalPlayer.Character
+							local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
 
-								local WaitingAnimation = LocalPlayer.Character
-									:FindFirstChild"Humanoid"									
-:LoadAnimation(AnimationFolder.fishing.waiting)
-								WaitingAnimation.Priority = Enum.AnimationPriority.Action3
-								WaitingAnimation:Play()
+							if not Throw or not Humanoid then
+								return
+							end
 
-								local UnequippedLoop, CastConnection
-
-								CastConnection = Values.casted.Changed:Once(function()
-									WaitingAnimation:Stop()
-									WaitingAnimation:Destroy()
-									coroutine.close(UnequippedLoop)
-								end)
-
-								UnequippedLoop = coroutine.create(function()
-									repeat
-										task.wait()
-									until not CurrentTool
-									WaitingAnimation:Stop()
-									WaitingAnimation:Destroy()
-									CastConnection:Disconnect()
-								end)
-
-								coroutine.resume(UnequippedLoop)
-							end)
-						end
+							local Track = Humanoid:LoadAnimation(Throw)
+							Track.Priority = Enum.AnimationPriority.Action3
+							Track:Play()
+						end)
 					end
 				end)
 			end
