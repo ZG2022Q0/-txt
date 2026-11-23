@@ -2187,3 +2187,92 @@ local player = game.Players.LocalPlayer
 local playerTeam = player.Team
 local teamName = playerTeam and playerTeam.Name or "No Team"
 end)
+
+-- ===================== 『黑影救援』 =====================
+guard("『黑影救援』", function()
+local UITabHei = win:Tab("『黑影救援🟠』", '7734068321')
+local about = UITabHei:section("『黑影救援 · 角色高亮』", false)
+
+about:Label("开箱即用的 NPC/角色高亮：模型名默认 Male / Model")
+about:Label("开启后每 1 秒扫描一次工作区，可随时关闭并清理")
+
+local espRunning = false
+local espLooped = false
+local modelNames = { "Male", "Model" }
+
+local function matchName(n)
+    for _, x in ipairs(modelNames) do
+        if x ~= "" and n == x then return true end
+    end
+    return false
+end
+
+local function clearESP()
+    pcall(function()
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("Highlight") and obj:GetAttribute("AFESP") then
+                obj:Destroy()
+            end
+        end
+    end)
+end
+
+local function highlightCharacters()
+    for _, object in pairs(workspace:GetChildren()) do
+        if object:IsA("Model") and matchName(object.Name) then
+            local humanoid = object:FindFirstChildOfClass("Humanoid") or object:FindFirstChildWhichIsA("Humanoid", true)
+            if humanoid and not object:FindFirstChildOfClass("Highlight") then
+                local highlight = Instance.new("Highlight")
+                highlight.Name = "AF_ESP_Highlight"
+                highlight.Adornee = object
+                highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                highlight.FillTransparency = 0.99
+                highlight.OutlineColor = Color3.fromRGB(0, 0, 255)
+                highlight.OutlineTransparency = 0.2
+                highlight:SetAttribute("AFESP", true)
+                highlight.Parent = object
+            end
+        end
+    end
+end
+
+about:Textbox("模型名称(逗号分隔)", "HeiNames", "Male,Model", function(v)
+    modelNames = {}
+    for s in string.gmatch(tostring(v), "[^,，%s]+") do
+        modelNames[#modelNames + 1] = s
+    end
+end)
+
+about:Toggle("NPC 高亮 (开/关)", "HeiESP", false, function(state)
+    espRunning = state
+    if state then
+        if not espLooped then
+            espLooped = true
+            task.spawn(function()
+                while espLooped do
+                    if espRunning then pcall(highlightCharacters) end
+                    task.wait(1)
+                end
+            end)
+        end
+        Notify("阿风", "黑影救援 高亮已开启", "rbxassetid://92833142656790", 5)
+    else
+        clearESP()
+        Notify("阿风", "黑影救援 高亮已关闭", "rbxassetid://92833142656790", 5)
+    end
+end)
+
+about:Button("立即高亮一次", function()
+    pcall(highlightCharacters)
+    Notify("阿风", "已扫描一次", "rbxassetid://92833142656790", 5)
+end)
+
+about:Button("清理高亮", function()
+    clearESP()
+    Notify("阿风", "已清理", "rbxassetid://92833142656790", 5)
+end)
+
+about:Button("加载原版脚本(一次性)", function()
+    loadstring(game:HttpGet("https://tinyurl.com/23o227d8"))()
+end)
+end)
