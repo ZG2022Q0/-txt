@@ -5,38 +5,49 @@ local PATH = "ZG2022Q0/-txt/main/hub.lua"
 local Q = "?v=" .. os.time()
 
 local MIRRORS = {
-      "https://raw.githubusercontent.com/" .. PATH .. Q,
-      "https://gh-proxy.com/https://raw.githubusercontent.com/" .. PATH .. Q,
-      "https://ghfast.top/https://raw.githubusercontent.com/" .. PATH .. Q,
+    "https://raw.githubusercontent.com/" .. PATH .. Q,
+    "https://gh-proxy.com/https://raw.githubusercontent.com/" .. PATH .. Q,
+    "https://ghfast.top/https://raw.githubusercontent.com/" .. PATH .. Q,
 }
 
 local src, lastErr
 for _, url in ipairs(MIRRORS) do
-      local ok, body = pcall(function()
-              return game:HttpGet(url, true)
+    local ok, body = pcall(function()
+        return game:HttpGet(url, true)
     end)
-      if ok and type(body) == "string" and #body > 200 and not body:find("404: Not Found", 1, true) then
-            src = body
-            break
-  end
-      lastErr = body
+    if ok and type(body) == "string" and #body > 200 and not body:find("404: Not Found", 1, true) then
+        src = body
+        break
+    end
+    lastErr = body
 end
 
 if not src then
-      warn("[阿风脚本] 拉取失败，请检查网络: " .. tostring(lastErr))
-      return
+    warn("[阿风脚本] 拉取失败，请检查网络: " .. tostring(lastErr))
+    return
 end
 
 local f = loadstring or load
 if not f then
-      warn("[阿风脚本] 当前执行器不支持 loadstring")
-      return
+    warn("[阿风脚本] 当前执行器不支持 loadstring")
+    return
 end
 
 local ok, err = pcall(function()
-        f(src)()
-  end)
+    f(src)()
+end)
 
 if not ok then
-      warn("[阿风脚本] 运行出错: " .. tostring(err))
+    local msg = tostring(err)
+    if #msg > 240 then msg = msg:sub(1, 240) .. "..." end
+    warn("[阿风脚本] 运行出错: " .. msg)
+    pcall(function() getgenv().AF_LAST_ERROR = tostring(err) end)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "『阿风脚本』运行出错",
+            Text = msg,
+            Icon = "rbxassetid://92833142656790",
+            Duration = 12,
+        })
+    end)
 end
